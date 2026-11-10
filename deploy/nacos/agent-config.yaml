@@ -1,0 +1,115 @@
+# 码上短剧 AI Agent 配置
+# 由 scripts/init-nacos-config.py 发布到 Nacos
+# namespace=mashang-duanju-{{ENV}}, group=DEFAULT_GROUP, dataId=agent-config.yaml
+msd:
+  ai:
+    temperature: {{AI_TEMPERATURE}}
+    model: ${DEEPSEEK_MODEL:deepseek-flash}
+    api-key: ${DEEPSEEK_API_KEY:}
+    mock:
+      delay-ms: 50
+      error-rate: 0.0
+      # 模拟 RAG 检索耗时和返回片段数；接真实 Milvus 后替换
+      rag-delay-ms: 120
+      rag-top-k: 3
+    # AgentScope Supervisor；缺少 API Key 时自动跳过相关 Bean，旧 Mock 接口仍可用
+    agent:
+      enabled: ${MSD_AGENT_ENABLED:true}
+      model: ${DEEPSEEK_AGENT_MODEL:deepseek-flash}
+      base-url: "${DEEPSEEK_BASE_URL:}"
+      workspace: ${AGENTSCOPE_WORKSPACE:.agentscope/workspace}
+      # 含冒号的值必须加引号，否则 YAML 解析失败
+      session-key-prefix: "mashang:agent:session:"
+      request-timeout: 120s
+      # 秒级意图路由：规则前置，低置信度交给 Supervisor 模型兜底
+      routing:
+        enabled: true
+        rules-version: v1
+        high-confidence: 0.7
+        low-confidence: 0.4
+        cache-ttl-minutes: 30
+        fast-path-audit: true
+        # AgentGuardHook 使用同一前缀，单会话最多 4 次子 Agent spawn
+        max-spawn: 4
+        rules:
+          - name: companion-keyword
+            route: COMPANION
+            agent: companion-agent
+            weight: 0.85
+            priority: 30
+            keywords: [前情, 剧情, 人物关系, 剧透, 结局, 反转, 当前集, 这一集]
+            patterns:
+              - '第\s*[0-9一二三四五六七八九十]+\s*集'
+          - name: search-keyword
+            route: SEARCH
+            agent: search-agent
+            weight: 0.86
+            priority: 50
+            keywords: [找剧, 剧荒, 搜剧, 什么剧, 推荐一部, 想看一部]
+            patterns:
+              - '找.{0,6}剧|有没有.{0,8}(剧|短剧)|推荐.{0,6}剧|类似.{0,6}剧'
+          - name: recommend-keyword
+            route: RECOMMEND
+            agent: search-agent
+            weight: 0.8
+            priority: 45
+            keywords: [推荐, 类似, 同类型, 先婚后爱, 甜宠, 悬疑]
+            patterns: []
+          - name: audit-keyword
+            route: AUDIT
+            agent: audit-agent
+            weight: 0.9
+            priority: 40
+            keywords: [审核, 违规, 敏感词, 合规, 下架, 内容风险, 风险判断]
+            patterns:
+              - '审核|合规检查|风险判断'
+          - name: data-keyword
+            route: DATA
+            agent: data-agent
+            weight: 0.8
+            priority: 20
+            keywords: [热度, 榜单, 播放量, 数据分析, 统计, 多少集, 集数, 完播率]
+            patterns: []
+          - name: social-keyword
+            route: SOCIAL
+            agent: social-agent
+            weight: 0.8
+            priority: 10
+            keywords: [评论回复, 评论, 文案, 社媒, 活动, 用户情绪, 点赞引导, 收藏引导]
+            patterns: []
+      # 工具权限沙箱：只注册这些只读业务工具
+      tools:
+        enabled: true
+        allow:
+          - get_home_dramas
+          - get_drama_detail
+          - list_drama_episodes
+          - get_episode_summary
+          - search_drama_context
+          - search_drama_rag
+          - audit_remote
+        max-text-length: 5000
+        max-query-length: 500
+        max-limit: 50
+    # A2A：audit 进程暴露 Endpoint，Supervisor 通过 Nacos 发现并调用
+    a2a:
+      audit:
+        name: audit-agent
+        host: ${MSD_A2A_AUDIT_HOST:127.0.0.1}
+        port: ${MSD_A2A_AUDIT_PORT:8106}
+        path: "/"
+        prompt-file: ${MSD_A2A_AUDIT_PROMPT:.agentscope/workspace/subagents/audit-agent.md}
+      nacos:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-dev}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      remote:
+        agent-name: audit-agent
+        request-timeout: 60s
+        max-retries: 2
+        # 工具级上限，短于 Supervisor 的 120s 请求超时
+        tool-timeout: 90s
+    embedding:
+      model: ${DASHSCOPE_EMBEDDING_MODEL:qwen3.7-text-embedding-flash}
+      api-key: ${DASHSCOPE_API_KEY:}

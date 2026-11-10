@@ -1,0 +1,6 @@
+# 订单服务本地配置
+# 仅用于验证 Seata 全局事务回滚；正常运行时必须为 false
+msd:
+  tx:
+    demo:
+      fail-after-remote: false

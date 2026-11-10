@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1450" viewBox="0 0 2200 1450" role="img" aria-labelledby="title desc">
+  <title id="title">msd-agent-service/src 文件级架构</title>
+  <desc id="desc">以文件为节点展示 msd-agent-service/src 的架构：AgentServiceApplication 启动，controller 调用 service，service 依赖 config；Supervisor 8105 使用 AgentScope HarnessAgent、Toolkit、Redis 会话和远程 A2A，并通过 CompanionTools 调用 content-service 的当前集摘要与前情；audit 8106 使用 A2A Server、AuditPromptLoader 和 Nacos AgentCard 注册；tool/client 通过 Feign、Nacos、Redis、DeepSeek 连接外部依赖。</desc>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-dashed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#0f172a" flood-opacity="0.07"/>
+    </filter>
+    <style>
+      text { font-family: 'Segoe UI','Microsoft YaHei',Arial,sans-serif; }
+      .title { font-size: 28px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-size: 13px; fill: #64748b; }
+      .legend { font-size: 11px; fill: #475569; }
+      .legend-title { font-size: 12px; font-weight: 600; fill: #94a3b8; letter-spacing: 1px; }
+      .panel-title { font-size: 12px; font-weight: 600; fill: #64748b; letter-spacing: 1px; }
+      .file-title { font-size: 13px; font-weight: 600; fill: #0f172a; }
+      .file-sub { font-size: 10px; fill: #475569; }
+      .dto-title { font-size: 11px; font-weight: 600; fill: #0f172a; }
+      .edge { font-size: 10px; fill: #64748b; }
+      .card-title { font-size: 13px; font-weight: 700; fill: #0f172a; }
+      .card-text { font-size: 11px; fill: #334155; }
+      .card-small { font-size: 10px; fill: #64748b; }
+      .note { font-size: 11px; fill: #475569; }
+      .note-warn { font-size: 11px; fill: #92400e; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1450" fill="#f8fafc"/>
+  <rect x="18" y="18" width="2164" height="1414" rx="18" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- 标题 -->
+  <text class="title" x="60" y="54">msd-agent-service/src · 文件级架构</text>
+  <text class="subtitle" x="60" y="82">AgentScope Supervisor 8105 / audit A2A 8106 · 以 Java 文件为节点 · 颜色表示 profile 加载范围</text>
+
+  <!-- 图例 -->
+  <text class="legend-title" x="1450" y="42">图例</text>
+  <rect x="1450" y="54" width="14" height="14" rx="3" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="legend" x="1472" y="65">共用（无 @Profile）</text>
+  <rect x="1640" y="54" width="14" height="14" rx="3" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="legend" x="1662" y="65">Supervisor 8105（!audit）</text>
+  <rect x="1870" y="54" width="14" height="14" rx="3" fill="#ffedd5" stroke="#f97316"/>
+  <text class="legend" x="1892" y="65">Audit 8106（audit）</text>
+  <rect x="1450" y="78" width="14" height="14" rx="3" fill="#ede9fe" stroke="#8b5cf6"/>
+  <text class="legend" x="1472" y="89">Mock / 遗留</text>
+  <rect x="1640" y="78" width="14" height="14" rx="3" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text class="legend" x="1662" y="89">src 外依赖</text>
+
+  <!-- 顶部：启动类、profile 说明、resources -->
+  <rect x="80" y="120" width="380" height="64" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text class="file-title" x="270" y="146" text-anchor="middle">AgentServiceApplication.java</text>
+  <text class="file-sub" x="270" y="166" text-anchor="middle">@SpringBootApplication + @EnableFeignClients</text>
+
+  <rect x="500" y="120" width="900" height="64" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+  <text x="520" y="142" font-size="13" font-weight="700" fill="#1e3a8a">同一 jar，双 profile / 双进程</text>
+  <text x="520" y="160" font-size="11" fill="#1e40af">8105 Supervisor：!audit · A2A server=false · Sentinel 开启</text>
+  <text x="520" y="178" font-size="11" fill="#1e40af">8106 Audit：audit · A2A server=true · discovery.register=false · Sentinel 关闭</text>
+
+  <rect x="1450" y="110" width="690" height="110" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="1470" y="128">resources · src/main/resources</text>
+  <rect x="1470" y="140" width="650" height="30" rx="6" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1485" y="159">application.yml</text>
+  <text class="file-sub" x="1605" y="159">8105 / 8106 基础配置 · A2A 默认关闭</text>
+  <rect x="1470" y="180" width="650" height="30" rx="6" fill="#ffedd5" stroke="#f97316"/>
+  <text class="dto-title" x="1485" y="199">application-audit.yml</text>
+  <text class="file-sub" x="1650" y="199">audit profile · 8106 · A2A 开启</text>
+
+  <!-- Controller 面板 -->
+  <rect x="60" y="250" width="1360" height="130" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="80" y="272">controller · WebFlux（HTTP 入口）</text>
+
+  <rect x="80" y="290" width="250" height="64" rx="9" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="205" y="314" text-anchor="middle">AgentChatController.java</text>
+  <text class="file-sub" x="205" y="334" text-anchor="middle">POST /internal/ai/agent/chat</text>
+
+  <rect x="350" y="290" width="250" height="64" rx="9" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="475" y="314" text-anchor="middle">AiChatController.java</text>
+  <text class="file-sub" x="475" y="334" text-anchor="middle">GET /internal/ai/chat（Mock）</text>
+
+  <rect x="620" y="290" width="250" height="64" rx="9" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="745" y="314" text-anchor="middle">RemoteAuditController.java</text>
+  <text class="file-sub" x="745" y="334" text-anchor="middle">POST /internal/ai/agent/audit/remote</text>
+
+  <rect x="890" y="290" width="250" height="64" rx="9" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="1015" y="314" text-anchor="middle">AiConfigController.java</text>
+  <text class="file-sub" x="1015" y="334" text-anchor="middle">GET /internal/config/ai</text>
+
+  <rect x="1160" y="290" width="250" height="64" rx="9" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="1285" y="314" text-anchor="middle">PingController.java</text>
+  <text class="file-sub" x="1285" y="334" text-anchor="middle">GET /internal/ping</text>
+
+  <!-- Service 面板 -->
+  <rect x="60" y="410" width="1000" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="80" y="432">service</text>
+
+  <rect x="80" y="440" width="300" height="64" rx="9" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="230" y="464" text-anchor="middle">SupervisorAgentService.java</text>
+  <text class="file-sub" x="230" y="484" text-anchor="middle">HarnessAgent.call + RuntimeContext</text>
+
+  <rect x="400" y="440" width="300" height="64" rx="9" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="550" y="464" text-anchor="middle">AiChatService.java</text>
+  <text class="file-sub" x="550" y="484" text-anchor="middle">Mock RAG + Sentinel aiChat</text>
+
+  <rect x="720" y="440" width="300" height="64" rx="9" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="870" y="464" text-anchor="middle">RemoteAuditService.java</text>
+  <text class="file-sub" x="870" y="484" text-anchor="middle">Nacos 发现 + A2A + 重试 / 降级</text>
+
+  <rect x="80" y="520" width="940" height="28" rx="6" fill="#dcfce7" stroke="#22c55e" stroke-width="1.1"/>
+  <text class="file-sub" x="96" y="539">AgentUnavailableException.java（无 @Profile；SupervisorAgentService / AgentChatController 使用）</text>
+
+  <!-- DTO 面板 -->
+  <rect x="1080" y="410" width="440" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="1100" y="432">dto（records）</text>
+  <rect x="1100" y="440" width="400" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1112" y="456">AgentChatRequest.java</text>
+  <rect x="1100" y="468" width="400" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1112" y="484">AgentChatReply.java</text>
+  <rect x="1100" y="496" width="400" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1112" y="512">AiReply.java</text>
+  <rect x="1100" y="524" width="400" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1112" y="540">RemoteAuditRequest.java</text>
+  <rect x="1100" y="552" width="400" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/>
+  <text class="dto-title" x="1112" y="568">RemoteAuditReply.java</text>
+
+  <!-- Supervisor Config 面板 -->
+  <rect x="60" y="590" width="760" height="270" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="80" y="612">config · Supervisor 8105（!audit）</text>
+
+  <rect x="80" y="620" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="190" y="642" text-anchor="middle">AgentConfig.java</text>
+  <text class="file-sub" x="190" y="660" text-anchor="middle">@Profile(!audit) · HarnessAgent</text>
+
+  <rect x="320" y="620" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="430" y="642" text-anchor="middle">AgentToolkitConfig.java</text>
+  <text class="file-sub" x="430" y="660" text-anchor="middle">Toolkit + @Tool 桥接</text>
+
+  <rect x="560" y="620" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="670" y="642" text-anchor="middle">AgentSessionConfig.java</text>
+  <text class="file-sub" x="670" y="660" text-anchor="middle">RedisAgentStateStore</text>
+
+  <rect x="80" y="700" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="190" y="722" text-anchor="middle">RedissonConfig.java</text>
+  <text class="file-sub" x="190" y="740" text-anchor="middle">RedissonClient</text>
+
+  <rect x="320" y="700" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="430" y="722" text-anchor="middle">RemoteAuditConfig.java</text>
+  <text class="file-sub" x="430" y="740" text-anchor="middle">NacosAgentCardResolver</text>
+
+  <rect x="560" y="700" width="220" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="670" y="722" text-anchor="middle">AgentModelConfig.java</text>
+  <text class="file-sub" x="670" y="740" text-anchor="middle">DeepSeek Model</text>
+
+  <rect x="80" y="780" width="700" height="50" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="430" y="802" text-anchor="middle">AgentModelConfiguredCondition.java</text>
+  <text class="file-sub" x="430" y="820" text-anchor="middle">条件：msd.ai.agent.enabled + DeepSeek API Key</text>
+
+  <!-- Audit Config 面板 -->
+  <rect x="840" y="590" width="740" height="270" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="860" y="612">config · Audit 8106（audit）</text>
+
+  <rect x="860" y="620" width="700" height="56" rx="8" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
+  <text class="file-title" x="1210" y="642" text-anchor="middle">AuditAgentConfig.java</text>
+  <text class="file-sub" x="1210" y="660" text-anchor="middle">@Profile(audit) · A2A Server + Nacos Registry + Executor</text>
+
+  <rect x="860" y="700" width="330" height="56" rx="8" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
+  <text class="file-title" x="1025" y="722" text-anchor="middle">AuditPromptLoader.java</text>
+  <text class="file-sub" x="1025" y="740" text-anchor="middle">读取 audit-agent.md</text>
+
+  <rect x="1210" y="700" width="350" height="56" rx="8" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
+  <text class="file-title" x="1385" y="722" text-anchor="middle">AuditAgentCardRegistrar.java</text>
+  <text class="file-sub" x="1385" y="740" text-anchor="middle">ApplicationRunner · 3 次重试</text>
+
+  <rect x="860" y="780" width="700" height="50" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.1" stroke-dasharray="5 4"/>
+  <text class="card-small" x="880" y="800">audit 进程不创建 Supervisor / Redis；只暴露 A2A JSON-RPC</text>
+  <text class="card-small" x="880" y="818">AgentScope A2A starter 自动暴露 /.well-known/agent-card.json 与 POST /</text>
+
+  <!-- Tool 面板 -->
+  <rect x="60" y="880" width="760" height="190" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="80" y="902">tool（Spring AI @Tool 注解）</text>
+
+  <rect x="80" y="910" width="220" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="190" y="932" text-anchor="middle">DramaTools.java</text>
+  <text class="file-sub" x="190" y="950" text-anchor="middle">get_home_dramas / get_drama_detail</text>
+
+  <rect x="310" y="910" width="220" height="56" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.4"/>
+  <text class="file-title" x="420" y="932" text-anchor="middle">RemoteAuditTools.java</text>
+  <text class="file-sub" x="420" y="950" text-anchor="middle">audit_remote · [REMOTE] / [DEGRADED]</text>
+
+  <rect x="540" y="910" width="260" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="670" y="932" text-anchor="middle">CompanionTools.java</text>
+  <text class="file-sub" x="670" y="950" text-anchor="middle">get_episode_summary / search_drama_context</text>
+
+  <rect x="80" y="990" width="720" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="440" y="1012" text-anchor="middle">SpringAiToolBridge.java</text>
+  <text class="file-sub" x="440" y="1030" text-anchor="middle">Spring AI @Tool → AgentScope AgentTool（反射；避开 victools 冲突）</text>
+
+  <!-- Client 面板 -->
+  <rect x="840" y="880" width="740" height="190" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="860" y="902">client</text>
+
+  <rect x="860" y="910" width="340" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="1030" y="932" text-anchor="middle">AgentDramaClient.java</text>
+  <text class="file-sub" x="1030" y="950" text-anchor="middle">Feign → msd-drama /internal</text>
+
+  <rect x="1220" y="910" width="340" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="1390" y="932" text-anchor="middle">AgentFeignConfig.java</text>
+  <text class="file-sub" x="1390" y="950" text-anchor="middle">Feign Logger.Level.BASIC</text>
+
+  <rect x="860" y="990" width="340" height="56" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
+  <text class="file-title" x="1030" y="1012" text-anchor="middle">AgentDramaViews.java</text>
+  <text class="file-sub" x="1030" y="1030" text-anchor="middle">只读视图 records</text>
+
+  <rect x="1220" y="990" width="160" height="56" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
+  <text class="file-title" x="1300" y="1012" text-anchor="middle">MockLlmClient.java</text>
+  <text class="file-sub" x="1300" y="1030" text-anchor="middle">模拟 LLM</text>
+
+  <rect x="1400" y="990" width="160" height="56" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
+  <text class="file-title" x="1480" y="1012" text-anchor="middle">MockRagClient.java</text>
+  <text class="file-sub" x="1480" y="1030" text-anchor="middle">模拟 RAG</text>
+
+  <!-- 外部依赖面板 -->
+  <rect x="60" y="1090" width="1520" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="panel-title" x="80" y="1112">外部依赖（src 外）</text>
+
+  <rect x="80" y="1120" width="195" height="64" rx="8" fill="#ecfdf5" stroke="#10b981" stroke-width="1.3"/>
+  <text class="file-title" x="177" y="1144" text-anchor="middle">msd-drama</text>
+  <text class="file-sub" x="177" y="1162" text-anchor="middle">Feign 只读查询</text>
+
+  <rect x="290" y="1120" width="195" height="64" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.3"/>
+  <text class="file-title" x="387" y="1144" text-anchor="middle">Redis</text>
+  <text class="file-sub" x="387" y="1162" text-anchor="middle">AgentScope 会话状态</text>
+
+  <rect x="500" y="1120" width="195" height="64" rx="8" fill="#fce7f3" stroke="#ec4899" stroke-width="1.3"/>
+  <text class="file-title" x="597" y="1144" text-anchor="middle">DeepSeek</text>
+  <text class="file-sub" x="597" y="1162" text-anchor="middle">对话 / 审核模型</text>
+
+  <rect x="710" y="1120" width="195" height="64" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.3"/>
+  <text class="file-title" x="807" y="1144" text-anchor="middle">Nacos</text>
+  <text class="file-sub" x="807" y="1162" text-anchor="middle">配置 / 发现 / A2A</text>
+
+  <rect x="920" y="1120" width="195" height="64" rx="8" fill="#ffedd5" stroke="#f97316" stroke-width="1.3"/>
+  <text class="file-title" x="1017" y="1144" text-anchor="middle">audit A2A :8106</text>
+  <text class="file-sub" x="1017" y="1162" text-anchor="middle">JSON-RPC / AgentCard</text>
+
+  <rect x="1130" y="1120" width="195" height="64" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.3"/>
+  <text class="file-title" x="1227" y="1144" text-anchor="middle">.agentscope/workspace</text>
+  <text class="file-sub" x="1227" y="1162" text-anchor="middle">AGENTS.md / 4 个子 Agent</text>
+
+  <rect x="1340" y="1120" width="195" height="64" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="1.3"/>
+  <text class="file-title" x="1437" y="1144" text-anchor="middle">Sentinel</text>
+  <text class="file-sub" x="1437" y="1162" text-anchor="middle">aiChat 熔断规则</text>
+
+  <!-- 右侧说明卡 -->
+  <rect x="1620" y="250" width="520" height="400" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="card-title" x="1640" y="276">Profile 划分</text>
+
+  <circle cx="1647" cy="298" r="5" fill="#22c55e"/>
+  <text class="card-text" x="1660" y="302" font-weight="600">共用（无 @Profile）</text>
+  <text class="card-text" x="1660" y="322">AgentModelConfig + Condition</text>
+  <text class="card-text" x="1660" y="340">DramaTools / CompanionTools + Bridge</text>
+  <text class="card-text" x="1660" y="358">AgentDramaClient + Feign + Views</text>
+  <text class="card-text" x="1660" y="376">DTOs · Ping · AiConfig · AiChat</text>
+  <text class="card-text" x="1660" y="394">MockLlmClient + MockRagClient</text>
+  <text class="card-text" x="1660" y="412">application.yml</text>
+
+  <circle cx="1647" cy="438" r="5" fill="#3b82f6"/>
+  <text class="card-text" x="1660" y="442" font-weight="600">Supervisor 8105（!audit）</text>
+  <text class="card-text" x="1660" y="462">AgentConfig / Toolkit / Session / Redisson</text>
+  <text class="card-text" x="1660" y="480">RemoteAuditConfig / RemoteAuditTools</text>
+  <text class="card-text" x="1660" y="498">SupervisorAgentService / AgentChatController</text>
+  <text class="card-text" x="1660" y="516">RemoteAuditService / RemoteAuditController</text>
+
+  <circle cx="1647" cy="542" r="5" fill="#f97316"/>
+  <text class="card-text" x="1660" y="546" font-weight="600">Audit 8106（audit）</text>
+  <text class="card-text" x="1660" y="566">AuditAgentConfig / AuditPromptLoader</text>
+  <text class="card-text" x="1660" y="584">AuditAgentCardRegistrar</text>
+  <text class="card-text" x="1660" y="602">application-audit.yml</text>
+
+  <text class="card-small" x="1640" y="628">MockLlmClient / MockRagClient 无 @Profile，audit 进程也会加载；</text>
+  <text class="card-small" x="1640" y="642">它们只服务 /internal/ai/chat 的 Sentinel 演示。</text>
+
+  <rect x="1620" y="670" width="520" height="400" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="card-title" x="1640" y="696">关键依赖（文件 → 文件）</text>
+  <text class="card-text" x="1640" y="720">AgentChatController → SupervisorAgentService</text>
+  <text class="card-text" x="1640" y="740">SupervisorAgentService → AgentConfig</text>
+  <text class="card-text" x="1640" y="760">AgentConfig → AgentModelConfig / AgentToolkitConfig / AgentSessionConfig</text>
+  <text class="card-text" x="1640" y="780">AgentToolkitConfig → Drama / RemoteAudit / CompanionTools</text>
+  <text class="card-text" x="1660" y="798">└ SpringAiToolBridge 适配 @Tool</text>
+  <text class="card-text" x="1640" y="818">DramaTools → AgentDramaClient → msd-drama</text>
+  <text class="card-text" x="1640" y="838">CompanionTools → AgentCompanionClient → content</text>
+  <text class="card-text" x="1640" y="1056">RemoteAuditTools → RemoteAuditService → A2A</text>
+  <text class="card-text" x="1640" y="858">RemoteAuditService → RemoteAuditConfig → Nacos</text>
+  <text class="card-text" x="1660" y="876">└ 发现 audit-agent → A2A :8106</text>
+  <text class="card-text" x="1640" y="896">AuditAgentConfig → AuditPromptLoader</text>
+  <text class="card-text" x="1640" y="916">AuditAgentConfig → AuditAgentCardRegistrar</text>
+  <text class="card-text" x="1640" y="936">AuditAgentCardRegistrar → Nacos AgentCard</text>
+  <text class="card-text" x="1640" y="956">AiChatController → AiChatService</text>
+  <text class="card-text" x="1640" y="976">AiChatService → MockLlmClient / MockRagClient</text>
+  <text class="card-text" x="1640" y="996">AgentSessionConfig → RedissonConfig → Redis</text>
+  <text class="card-text" x="1640" y="1016">AgentModelConfig → DeepSeek</text>
+  <text class="card-text" x="1640" y="1036">PingController / AiConfigController 仅读配置</text>
+
+  <rect x="1620" y="1090" width="520" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <text class="card-title" x="1640" y="1114">运行方式</text>
+  <text class="card-small" x="1640" y="1136">8105：java -jar ... --msd.ai.agent.model=deepseek-flash</text>
+  <text class="card-small" x="1640" y="1156">8106：NACOS_NAMESPACE=... --spring.profiles.active=audit</text>
+  <text class="card-small" x="1640" y="1176">application-audit.yml：8106 / A2A on / Sentinel off</text>
+  <text class="card-small" x="1640" y="1196">audit 进程不创建 Redis；Supervisor 会话 key 前缀可配置</text>
+
+  <!-- 主要依赖箭头 -->
+  <line x1="270" y1="184" x2="270" y2="248" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow-dashed)"/>
+  <text class="edge" x="282" y="220">component scan</text>
+
+  <line x1="205" y1="354" x2="230" y2="438" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="475" y1="354" x2="550" y2="438" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="745" y1="354" x2="870" y2="438" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="242" y="400">调用</text>
+
+  <line x1="1060" y1="485" x2="1078" y2="485" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow-dashed)"/>
+
+  <line x1="250" y1="560" x2="250" y2="588" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="260" y="578">装配</text>
+
+  <line x1="900" y1="560" x2="900" y2="588" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow-dashed)"/>
+  <text class="edge" x="910" y="578">远程审核</text>
+
+  <line x1="430" y1="860" x2="430" y2="878" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="440" y="874">Toolkit</text>
+
+  <line x1="1100" y1="860" x2="1100" y2="878" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="1110" y="874">A2A / Prompt</text>
+
+  <line x1="300" y1="1070" x2="300" y2="1088" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="310" y="1084">Feign</text>
+
+  <line x1="1100" y1="1070" x2="1100" y2="1088" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="edge" x="1110" y="1084">Redis / Model / Nacos</text>
+
+  <!-- AuditConfig 内部关系 -->
+  <polyline points="1000,676 1000,690 1025,690 1025,698" fill="none" stroke="#f97316" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <polyline points="1000,676 1000,690 1375,690 1375,698" fill="none" stroke="#f97316" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- 底部说明 -->
+  <text class="note" x="60" y="1300">颜色 = profile 加载范围；箭头 = 主要依赖，不表示全部 import。</text>
+  <text class="note" x="60" y="1326">src/main/java 共 33 个 Java 文件；src/test 无测试源码；src/main/resources 共 2 个 YAML。</text>
+  <text class="note-warn" x="60" y="1352">重点：Supervisor 8105 走 AgentScope HarnessAgent + Redis 会话；Audit 8106 走 A2A Server + Nacos AgentCard，不创建 Supervisor / Redis。</text>
+  <text class="note" x="60" y="1378">MockLlmClient / MockRagClient 只用于 /internal/ai/chat 的 Sentinel 演示，与真实 AgentScope 调用链相互独立。</text>
+</svg>

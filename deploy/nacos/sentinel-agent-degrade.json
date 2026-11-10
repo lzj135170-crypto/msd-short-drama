@@ -1,0 +1,31 @@
+[
+  {
+    "resource": "aiChat",
+    "limitApp": "default",
+    "grade": 0,
+    "count": 1000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "aiChat",
+    "limitApp": "default",
+    "grade": 1,
+    "count": 0.5,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000
+  },
+  {
+    "resource": "agentChat",
+    "limitApp": "default",
+    "grade": 1,
+    "count": 60000,
+    "timeWindow": 30,
+    "minRequestAmount": 5,
+    "statIntervalMs": 30000,
+    "slowRatioThreshold": 0.5
+  }
+]

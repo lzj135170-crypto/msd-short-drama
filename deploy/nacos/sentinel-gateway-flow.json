@@ -1,0 +1,98 @@
+[
+  {
+    "resource": "msd-user",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 10,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  },
+  {
+    "resource": "msd-drama",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 10,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  },
+  {
+    "resource": "msd-order",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 10,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  },
+  {
+    "resource": "msd-interaction",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 10,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  },
+  {
+    "resource": "msd-agent-service",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 10,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  },
+  {
+    "resource": "msd-content-service",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 5,
+    "intervalSec": 1,
+    "controlBehavior": 0,
+    "burst": 0,
+    "maxQueueingTimeoutMs": 500,
+    "paramItem": {
+      "parseStrategy": 0,
+      "fieldName": "",
+      "pattern": "",
+      "matchStrategy": 0
+    }
+  }
+]

@@ -1,0 +1,83 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.kotlin
+
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/logs/
+
+### Python ###
+__pycache__/
+*.py[cod]
+.pytest_cache/
+rex-uninlu-service/.venv/
+rex-uninlu-service/models/
+
+### Claude local ###
+.claude/settings_local.json
+.claude/skills/
+
+### Project ###
+.env
+.env.*
+**/.env.*
+!.env.example
+!**/.env.example
+deploy/.env
+deploy/seata/libs/*.jar
+deploy/nacos/backup/
+logs/
+log/
+*.log
+*.pem
+*.key
+*.p12
+*.jks
+derby.log
+*.iml
+.idea/
+eval/report*.json
+
+### AgentScope runtime ###
+.agentscope/workspace/agents/
+.agentscope/workspace/[0-9]*/
+.agentscope/workspace/memory/
+.agentscope/workspace/plans/
+.agentscope/workspace/MEMORY.md

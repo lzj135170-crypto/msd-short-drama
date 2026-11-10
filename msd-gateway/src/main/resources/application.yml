@@ -1,0 +1,160 @@
+# 统一网关：通过 Nacos 服务发现动态路由（lb://）
+server:
+  port: 8000
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-gateway
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  reactor:
+    # WebFlux 自动上下文传播，保证网关观察过滤器能读到当前 trace
+    context-propagation: auto
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-gateway.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+    gateway:
+      server:
+        webflux:
+          # 下游如果也返回 CORS 头，这里做去重
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+          # 开发环境允许所有来源；生产环境改成具体域名
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns: ["*"]
+                allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowed-headers: ["*"]
+                exposed-headers: [X-Trace-Id]
+                allow-credentials: true
+                max-age: 3600
+          # 路由到各业务服务，lb:// 走 Nacos 服务发现
+          routes:
+            - id: msd-user
+              uri: lb://msd-user
+              predicates:
+                - Path=/api/user/**
+              filters:
+                - StripPrefix=2
+            - id: msd-drama
+              uri: lb://msd-drama
+              predicates:
+                # 只暴露用户端接口；/internal-source/** 仅允许服务间直连
+                - Path=/api/drama/internal/**
+              filters:
+                - StripPrefix=2
+            - id: msd-order
+              uri: lb://msd-order
+              predicates:
+                - Path=/api/order/**
+              filters:
+                - StripPrefix=2
+            - id: msd-interaction
+              uri: lb://msd-interaction
+              predicates:
+                - Path=/api/interaction/**
+              filters:
+                - StripPrefix=2
+            - id: msd-agent-service
+              uri: lb://msd-agent-service
+              predicates:
+                # 只暴露真实 Agent 对话和 ADMIN-only Mock；配置/远程审核仅允许直连
+                - Path=/api/agent/internal/ai/agent/chat,/api/agent/internal/ai/chat
+              filters:
+                - StripPrefix=2
+            - id: msd-content-service
+              uri: lb://msd-content-service
+              predicates:
+                # 只暴露推荐、相似短剧、伴看和 SSE；reindex/status/tools 仅允许直连 8107
+                - Path=/api/content/internal/ai/rag/recommend,/api/content/internal/ai/rag/recommend/stream,/api/content/internal/ai/rag/personalized,/api/content/internal/ai/rag/personalized/evict,/api/content/internal/ai/rag/preferences,/api/content/internal/ai/rag/related,/api/content/internal/ai/companion/chat,/api/content/internal/ai/companion/chat/stream,/api/content/internal/ai/companion/recap,/api/content/internal/ai/audit/dramas/**,/api/content/internal/ai/audit/precheck,/api/content/internal/ai/copilot/generate,/api/content/internal/ai/rag/reindex
+              filters:
+                - StripPrefix=2
+
+    # Sentinel 网关限流
+    sentinel:
+      eager: true
+      # 网关只用 SCG 路由资源，关闭通用 WebFlux URL 资源，避免重复统计
+      filter:
+        enabled: false
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+        # 必须是 dashboard 能校验通过的 IPv4；host.docker.internal 会被 dashboard 拒绝
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.1}
+        port: 8719
+      scg:
+        # 默认 order=Ordered.HIGHEST_PRECEDENCE，会排在 JWT(-100) 前面；
+        # 设为 -50 让 JWT 先执行，未登录请求直接 401，不消耗限流额度
+        order: -50
+        fallback:
+          mode: response
+          response-status: 429
+          content-type: application/json
+          response-body: '{"code":42900,"message":"请求过于频繁","data":null,"success":false}'
+      datasource:
+        gw-flow:
+          nacos:
+            server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+            namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+            data-id: sentinel-gateway-flow.json
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: gw-flow
+
+# JWT 鉴权配置
+msd:
+  auth:
+    jwt:
+      # 至少 32 字节；生产用 MSD_JWT_SECRET 覆盖
+      secret: ${MSD_JWT_SECRET:msd-dev-jwt-secret-change-me-32bytes-min}
+      # 与 Token 的 iss 声明一致
+      issuer: ${MSD_JWT_ISSUER:msd}
+    # 本地测试台的 Token 签发开关，默认关闭，只在 application-dev.yml 打开
+    dev-token:
+      enabled: false
+      ttl-seconds: 7200
+  security:
+    # 网关向 Agent 注入的服务间 token；生产必须设置 MSD_INTERNAL_TOKEN
+    internal-token: ${MSD_INTERNAL_TOKEN:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      access: read-only   # 暴露 /actuator/gateway/routes，便于本地验证路由
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+logging:
+  level:
+    com.msd: info
+    org.springframework.cloud.gateway: info

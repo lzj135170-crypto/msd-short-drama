@@ -1,0 +1,78 @@
+# 码上短剧短剧服务配置
+# 由 scripts/init-nacos-config.py 发布到 Nacos
+# namespace=mashang-duanju-{{ENV}}, group=DEFAULT_GROUP, dataId=msd-drama.yaml
+spring:
+  datasource:
+    hikari:
+      # 互动计数消费与首页查询并发，连接池单独放大
+      maximum-pool-size: 20
+  kafka:
+    consumer:
+      # 公共配置默认 earliest；计数消费组从最新开始，避免回放旧事件重复计数
+      auto-offset-reset: latest
+
+msd:
+  kafka:
+    drama-concurrency: 6
+    # 审核通过/下架后发布 RAG 增量索引事件
+    drama-changed:
+      enabled: true
+    # 字幕导入/ASR 回传后发布 transcript 索引事件
+    transcript-changed:
+      enabled: true
+  interaction:
+    batch-consumer:
+      # 默认逐条消费；压测确认热点行瓶颈后再切 true
+      enabled: false
+  cache:
+    enabled: true
+    max-size: 20000
+    policies:
+      home:
+        l1-ttl: 10s
+        l2-ttl: 30s
+        null-ttl: 30s
+      detail:
+        l1-ttl: 30s
+        l2-ttl: 300s
+        null-ttl: 30s
+    lock:
+      wait: 2s
+      spin: 50ms
+      lease: 30s
+    evict:
+      delay: 500ms
+      home-debounce: 30s
+      detail-debounce: 2s
+      # 跨实例 L1 失效广播；Redis 不可用时自动跳过
+      broadcast-enabled: true
+    bloom:
+      enabled: true
+      key-prefix: msd:drama:bloom
+      expected-insertions: 100000
+      false-probability: 0.01
+      filter-ttl: 24h
+      old-filter-ttl: 10m
+      pointer-cache-ttl: 10s
+      page-size: 1000
+    redis:
+      failure-backoff: 15s
+    # demo 控制器只在 dev profile 加载，不覆盖 enabled
+    demo:
+      ai-base-url: ${MSD_AGENT_URL:http://127.0.0.1:8105}
+      connect-timeout: 2s
+      read-timeout: 10s
+      max-calls: 200
+
+xxl:
+  job:
+    enabled: true
+    admin:
+      addresses: ${XXL_JOB_ADMIN_ADDRESS:http://127.0.0.1:8088}
+    accessToken: "{{XXL_JOB_ACCESS_TOKEN}}"
+    executor:
+      appname: msd-drama-executor
+      address: ${XXL_JOB_EXECUTOR_ADDRESS:http://host.docker.internal:9999}
+      port: 9999
+      logpath: ./logs/xxl-job
+      logretentiondays: 7

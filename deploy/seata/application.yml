@@ -1,0 +1,45 @@
+server:
+  # Seata 2.5 的 namingserver 控制台端口；TC 端口由 seata.server.service-port 指定
+  port: 9898
+
+spring:
+  application:
+    name: seata-server
+  main:
+    # Seata Server 的控制台由自身启动，避免 Spring Boot 再起一个 Web 容器
+    web-application-type: none
+
+logging:
+  config: classpath:logback-spring.xml
+  file:
+    path: ${log.home:${user.home}/logs/seata}
+
+seata:
+  config:
+    type: file
+  registry:
+    type: nacos
+    nacos:
+      application: seata-server
+      server-addr: nacos:8848
+      namespace: mashang-duanju-dev
+      group: SEATA_GROUP
+      cluster: default
+  store:
+    mode: db
+    db:
+      datasource: druid
+      db-type: mysql
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://host.docker.internal:3306/seata?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      user: ${MSD_DB_USERNAME:msd}
+      password: ${MSD_DB_PASSWORD}
+      min-conn: 5
+      max-conn: 30
+      global-table: global_table
+      branch-table: branch_table
+      lock-table: lock_table
+      distributed-lock-table: distributed_lock
+      query-limit: 100
+  server:
+    service-port: 8091

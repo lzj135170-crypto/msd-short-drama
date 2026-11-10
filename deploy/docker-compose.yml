@@ -1,0 +1,242 @@
+name: msd-infra
+
+services:
+  nacos:
+    image: docker.1panel.live/nacos/nacos-server:v3.1.1
+    container_name: msd-nacos
+    ports:
+      - "8848:8848"   # 客户端 HTTP
+      - "9848:9848"   # 客户端 gRPC
+      - "9849:9849"   # 服务端 gRPC
+      - "8080:8080"   # 3.x 控制台
+    environment:
+      MODE: standalone
+      EMBEDDED_STORAGE: embedded
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-false}
+      # 3.x 启动脚本强制校验，即使关闭鉴权也必须给一个 Base64 字符串
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:?NACOS_AUTH_TOKEN is required}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-change-me}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-change-me}
+      JVM_XMS: 512m
+      JVM_XMX: 512m
+      JVM_XMN: 256m
+    volumes:
+      - nacos_data:/home/nacos/data
+      - nacos_logs:/home/nacos/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v3/console/health/readiness >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: msd-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - -advertise-client-urls=http://127.0.0.1:2379
+      - -listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: msd-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  milvus:
+    image: docker.1panel.live/milvusdb/milvus:v2.6.4
+    container_name: msd-milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      # Milvus 2.6 的 common.storageType 只接受 remote/local/opendal；
+      # minio 已废弃，会导致 Arrow FileSystem 初始化失败并在写入时 panic
+      COMMON_STORAGETYPE: remote
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  elasticsearch:
+    image: m.daocloud.io/docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: msd-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      xpack.ml.enabled: "false"
+      ingest.geoip.downloader.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:9200:9200"   # 只绑本机，本地开发不启用 ES 安全认证
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  xxl-job-admin:
+    image: docker.1panel.live/xuxueli/xxl-job-admin:3.5.0
+    container_name: msd-xxl-job-admin
+    ports:
+      - "8088:8080"
+    environment:
+      PARAMS: >-
+        --spring.datasource.url=jdbc:mysql://host.docker.internal:3306/xxl_job?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+        --spring.datasource.username=${MSD_DB_USERNAME:-msd}
+        --spring.datasource.password=${MSD_DB_PASSWORD:?MSD_DB_PASSWORD is required}
+        --xxl.job.accessToken=${XXL_JOB_ACCESS_TOKEN:?XXL_JOB_ACCESS_TOKEN is required}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - xxl_job_logs:/data/applogs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/auth/login >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  sentinel-dashboard:
+    image: docker.1panel.live/bladex/sentinel-dashboard:1.8.9
+    container_name: msd-sentinel-dashboard
+    ports:
+      - "127.0.0.1:8858:8858"   # 只绑本机；默认账号见 Sentinel 官方文档
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Dashboard 回连宿主机上的 Sentinel 客户端
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8858/ || curl -fsS http://127.0.0.1:8858/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  zipkin:
+    image: docker.1panel.live/openzipkin/zipkin:3.6.1
+    container_name: msd-zipkin
+    ports:
+      - "127.0.0.1:9411:9411"   # 只绑本机，Zipkin UI 不暴露到局域网
+    environment:
+      # 本地演示用内存存储，容器重启后 trace 丢失
+      STORAGE_TYPE: mem
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9411/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+  seata-server:
+    image: docker.1panel.live/apache/seata-server:2.5.0
+    container_name: msd-seata-server
+    ports:
+      - "8091:8091"             # TC 端口；容器注册到 Nacos 的地址必须是宿主机可达 IP
+      - "127.0.0.1:9988:9898"   # Seata 2.5 namingserver 控制台，只绑本机
+    environment:
+      # Seata 会拒绝 127.0.0.1 作为注册地址，默认用 Docker Desktop 的宿主机 IP；其他机器可覆盖
+      SEATA_IP: ${SEATA_IP:-192.168.65.1}
+      SEATA_PORT: 8091
+      STORE_MODE: db
+      TZ: Asia/Shanghai
+      MSD_DB_USERNAME: ${MSD_DB_USERNAME:-msd}
+      MSD_DB_PASSWORD: ${MSD_DB_PASSWORD:?MSD_DB_PASSWORD is required}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 容器访问宿主机 MySQL
+    volumes:
+      - ./seata/application.yml:/seata-server/resources/application.yml:ro
+      # 2.1+ 官方镜像不再内置 MySQL 驱动，单独挂到类路径
+      - ./seata/libs/mysql-connector-j.jar:/seata-server/libs/mysql-connector-j.jar:ro
+    depends_on:
+      nacos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:9898/health >/dev/null 2>&1 || wget -q -O- http://127.0.0.1:9898/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - msd-net
+
+volumes:
+  nacos_data:
+  nacos_logs:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  es_data:
+  xxl_job_logs:
+
+networks:
+  msd-net:
+    driver: bridge

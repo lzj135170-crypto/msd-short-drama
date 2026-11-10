@@ -1,0 +1,63 @@
+# 订单与积分服务
+server:
+  port: 8103
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-order
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-order.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+
+msd:
+  dev:
+    # 测试台故障接口开关，默认关闭，只在 application-dev.yml 打开
+    faults:
+      enabled: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+logging:
+  level:
+    com.msd: info

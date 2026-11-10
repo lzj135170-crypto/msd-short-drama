@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>码上短剧 · 数据一致性测试台</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand">
+        <span class="logo">MSD</span>
+        <div>
+            <div class="title-line">
+                <h1>数据一致性测试台</h1>
+                <span class="badge warn">DEV ONLY</span>
+            </div>
+            <p class="subtitle">Seata · 积分 · Outbox · Kafka · DLQ · Sentinel</p>
+        </div>
+    </div>
+    <div class="login">
+        <label>用户 ID <input id="userId" value="1003" inputmode="numeric"></label>
+        <label>角色
+            <select id="role">
+                <option>USER</option>
+                <option>CREATOR</option>
+                <option>ADMIN</option>
+            </select>
+        </label>
+        <button id="connectBtn" class="primary">连接</button>
+        <span id="tokenStatus" class="badge muted">未连接</span>
+    </div>
+</header>
+
+<main>
+    <section class="card compact">
+        <div class="card-head">
+            <h2>服务状态</h2>
+            <div class="row">
+                <span class="muted small">首次使用请先点右上角「连接」</span>
+                <button id="refreshHealthBtn" class="ghost small">刷新</button>
+            </div>
+        </div>
+        <div id="healthChips" class="chips">
+            <span class="badge muted">未检查</span>
+        </div>
+    </section>
+
+    <div class="grid">
+        <section class="card">
+            <div class="card-head">
+                <h2>积分解锁 / Seata</h2>
+                <span id="seataStatus" class="badge muted">待操作</span>
+            </div>
+
+            <div class="field-row">
+                <label>解锁剧集
+                    <input id="unlockEpisodeId" value="6004" inputmode="numeric">
+                </label>
+                <button id="queryEpisodeBtn" class="ghost">查询剧集</button>
+                <button id="queryPointsBtn" class="ghost">查询余额</button>
+                <button id="queryUnlockStateBtn" class="ghost">解锁状态</button>
+            </div>
+
+            <div class="field-row">
+                <button id="unlockBtn" class="primary">解锁并扣积分</button>
+                <label>回滚测试剧集
+                    <input id="rollbackEpisodeId" value="6006" inputmode="numeric">
+                </label>
+                <button id="rollbackBtn" class="danger">回滚测试</button>
+            </div>
+            <p class="hint">回滚测试请使用未解锁的收费剧集：6004 用于正常解锁，6006 用于回滚演示。</p>
+
+            <div id="seataResult" class="result-grid">
+                <span class="muted">尚未查询</span>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>互动操作</h2>
+                <span id="interactionStatus" class="badge muted">待操作</span>
+            </div>
+
+            <div class="field-row">
+                <label>短剧 ID <input id="interactionDramaId" value="5010" inputmode="numeric"></label>
+                <label>剧集 ID <input id="interactionEpisodeId" value="6902" inputmode="numeric"></label>
+                <button id="refreshInteractionBtn" class="ghost small">刷新状态</button>
+            </div>
+
+            <div class="button-grid">
+                <button id="likeDramaBtn" class="ghost">点赞短剧</button>
+                <button id="unlikeDramaBtn" class="ghost">取消短剧点赞</button>
+                <button id="likeEpisodeBtn" class="ghost">点赞剧集</button>
+                <button id="unlikeEpisodeBtn" class="ghost">取消剧集点赞</button>
+                <button id="favoriteBtn" class="ghost">收藏短剧</button>
+                <button id="unfavoriteBtn" class="ghost">取消收藏</button>
+                <button id="historyBtn" class="ghost">首次观看</button>
+                <button id="repeatHistoryBtn" class="ghost">重复观看</button>
+            </div>
+            <div id="socialState" class="state-line">短剧点赞：? · 剧集点赞：? · 收藏：?</div>
+
+            <div class="field-row">
+                <input id="commentContent" class="grow" value="[test-console] 来自测试台的评论">
+                <button id="createCommentBtn" class="primary">创建评论</button>
+            </div>
+            <div class="field-row">
+                <button id="likeCommentBtn" class="ghost" disabled>点赞最近评论</button>
+                <button id="deleteCommentBtn" class="ghost" disabled>删除最近评论</button>
+                <span id="commentState" class="muted small">最近评论：无</span>
+            </div>
+
+            <div id="interactionState" class="result-grid">
+                <span class="muted">点击按钮后在这里查看返回结果</span>
+            </div>
+        </section>
+
+        <section class="card wide">
+            <div class="card-head">
+                <h2>异步计数</h2>
+                <span id="counterStatus" class="badge muted">待刷新</span>
+            </div>
+            <div class="field-row">
+                <label>短剧 ID <input id="dramaId" value="5010" inputmode="numeric"></label>
+                <button id="refreshStatsBtn" class="ghost">刷新统计</button>
+                <span id="statUpdated" class="muted small"></span>
+            </div>
+            <p class="hint">计数由 Kafka 异步更新，通常 1-2 秒后变化；表中高亮行是互动操作选中的剧集。</p>
+
+            <div class="stats">
+                <div class="tile">
+                    <span class="tile-label">浏览</span>
+                    <strong id="statView">-</strong>
+                </div>
+                <div class="tile">
+                    <span class="tile-label">点赞</span>
+                    <strong id="statLike">-</strong>
+                </div>
+                <div class="tile">
+                    <span class="tile-label">收藏</span>
+                    <strong id="statFavorite">-</strong>
+                </div>
+                <div class="tile">
+                    <span class="tile-label">评论</span>
+                    <strong id="statComment">-</strong>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>集</th>
+                        <th>标题</th>
+                        <th>价格</th>
+                        <th>状态</th>
+                        <th>播放</th>
+                        <th>点赞</th>
+                        <th>评论</th>
+                        <th>解锁</th>
+                    </tr>
+                    </thead>
+                    <tbody id="episodeTableBody">
+                    <tr>
+                        <td colspan="8" class="muted">尚未加载</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card wide">
+            <div class="card-head">
+                <h2>Outbox 投递</h2>
+                <span id="outboxStatus" class="badge muted">待查询</span>
+            </div>
+            <div class="field-row">
+                <input id="eventIdInput" class="grow" placeholder="写操作返回的 eventId">
+                <button id="queryEventBtn" class="ghost">查询事件</button>
+                <button id="refreshOutboxBtn" class="ghost">最近事件</button>
+            </div>
+            <p class="hint">点赞、收藏、评论、观看成功后会自动追踪返回的 eventId；状态依次为 PENDING → SENT，失败进入 DEAD。</p>
+            <div id="outboxDetail" class="result-grid">
+                <span class="muted">最近一次写操作会自动追踪 eventId</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>类型</th>
+                        <th>Topic</th>
+                        <th>状态</th>
+                        <th>重试</th>
+                        <th>发送时间</th>
+                        <th>操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="outboxTableBody">
+                    <tr>
+                        <td colspan="7" class="muted">尚未加载</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>故障注入</h2>
+                <span id="faultStatus" class="badge muted">待操作</span>
+            </div>
+
+            <h3>DLQ 非法消息</h3>
+            <div class="field-row">
+                <button id="injectDlqBtn" class="danger">发送非法事件</button>
+                <button id="inspectDlqBtn" class="ghost">查看 DLQ</button>
+                <span id="dlqStatus" class="badge muted">待操作</span>
+            </div>
+            <div id="dlqMessages" class="dlq-list">
+                <span class="muted small">DLQ 只读巡检，不影响业务消费组</span>
+            </div>
+
+            <h3>Sentinel 并发压测</h3>
+            <div class="field-row">
+                <label>并发 <input id="burstCount" value="60" inputmode="numeric"></label>
+                <label>轮数 <input id="burstRounds" value="3" inputmode="numeric"></label>
+                <button id="burstBtn" class="primary">开始压测</button>
+            </div>
+            <div id="burstResult" class="burst-result">
+                <span class="muted small">目标：/api/interaction/internal/users/{id}/profile，限流阈值 10 QPS</span>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>快捷入口</h2>
+            </div>
+            <div class="links">
+                <a id="zipkinLink" href="#" target="_blank" rel="noopener">Zipkin 链路 <span>↗</span></a>
+                <a id="nacosLink" href="#" target="_blank" rel="noopener">Nacos 控制台 <span>↗</span></a>
+                <a id="sentinelLink" href="#" target="_blank" rel="noopener">Sentinel Dashboard <span>↗</span></a>
+                <a id="seataLink" href="#" target="_blank" rel="noopener">Seata 控制台 <span>↗</span></a>
+            </div>
+            <ul class="tips">
+                <li>先在右上角连接用户 1003，再进行后续操作。</li>
+                <li>解锁用 6004，回滚演示用 6006；互动默认短剧 5010、剧集 6902。</li>
+                <li>重复演示前执行 <code>reset_consistency_console.sql</code> 并重跑种子脚本。</li>
+            </ul>
+            <p class="muted small">
+                测试台仅在 dev profile 可用；Token 签发、回滚和 DLQ 注入接口在 test/prod 不会加载。
+            </p>
+        </section>
+    </div>
+
+    <section class="card">
+        <div class="card-head">
+            <h2>操作日志</h2>
+            <button id="clearLogBtn" class="ghost small">清空</button>
+        </div>
+        <div id="log" class="log">
+            <div class="log-entry info">
+                <span class="log-time">--:--:--</span>
+                <span>页面已加载，等待连接。</span>
+            </div>
+        </div>
+    </section>
+</main>
+
+<script src="./app.js"></script>
+</body>
+</html>

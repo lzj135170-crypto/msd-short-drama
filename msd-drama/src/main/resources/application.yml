@@ -1,0 +1,115 @@
+# 短剧服务
+server:
+  port: 8102
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-drama
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  # Tomcat 请求处理改用虚拟线程；Kafka/xxl-job/缓存调度仍是平台线程
+  threads:
+    virtual:
+      enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-drama.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+  kafka:
+    consumer:
+      group-id: msd-drama-counter-v1
+      # 计数消费者首次启动不重放历史事件，避免把旧事件重复计入
+      auto-offset-reset: latest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+msd:
+  cache:
+    enabled: true
+    max-size: 20000
+    policies:
+      home:
+        l1-ttl: 10s
+        l2-ttl: 30s
+        null-ttl: 30s
+      detail:
+        l1-ttl: 30s
+        l2-ttl: 300s
+        null-ttl: 30s
+    lock:
+      wait: 2s
+      spin: 50ms
+      lease: 30s
+    evict:
+      delay: 500ms
+      home-debounce: 30s
+      detail-debounce: 2s
+      broadcast-enabled: false
+    bloom:
+      enabled: true
+      key-prefix: msd:drama:bloom
+      expected-insertions: 100000
+      false-probability: 0.01
+      filter-ttl: 24h
+      old-filter-ttl: 10m
+      pointer-cache-ttl: 10s
+      page-size: 1000
+    redis:
+      failure-backoff: 15s
+    demo:
+      # 仅 dev profile 加载；压测接口不经过网关
+      enabled: ${MSD_CACHE_DEMO_ENABLED:true}
+      ai-base-url: ${MSD_AGENT_URL:http://127.0.0.1:8105}
+      connect-timeout: 2s
+      read-timeout: 10s
+      max-calls: 200
+
+xxl:
+  job:
+    # 本地无 Nacos 时默认关闭；msd-drama.yaml 中开启
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+logging:
+  level:
+    com.msd: info

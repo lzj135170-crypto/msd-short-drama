@@ -1,0 +1,90 @@
+# 互动服务
+server:
+  port: 8104
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-interaction
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    consumer:
+      # 评论计数消费组是新建组，不能回放历史事件
+      auto-offset-reset: latest
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-interaction.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+
+msd:
+  loadbalancer:
+    # round-robin 使用默认轮询，random 使用自定义随机策略
+    strategy: ${MSD_LB_STRATEGY:round-robin}
+  outbox:
+    # outbox relay 的轮询间隔、批量大小、发送超时和最大重试次数
+    relay-interval-ms: 1000
+    batch-size: 200
+    send-timeout-ms: 1000
+    max-retry: 5
+  interaction:
+    # 评论正文同步落库，计数由事件异步派生
+    async-counter:
+      enabled: true
+    comment-cache:
+      enabled: true
+      ttl-seconds: 15
+  kafka:
+    interaction-concurrency: 6
+  dev:
+    # 测试台故障接口开关，默认关闭，只在 application-dev.yml 打开
+    faults:
+      enabled: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+logging:
+  level:
+    com.msd: info
+    # Feign 日志级别设为 debug 才会输出 Logger.Level 配置的请求信息
+    com.msd.interaction.client: debug

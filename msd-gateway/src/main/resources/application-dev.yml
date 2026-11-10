@@ -1,0 +1,12 @@
+# 本地开发环境：测试台 Token 接口默认关闭，需要时用 MSD_DEV_TOKEN_ENABLED=true 显式开启
+msd:
+  auth:
+    dev-token:
+      enabled: ${MSD_DEV_TOKEN_ENABLED:false}
+      ttl-seconds: 7200
+
+spring:
+  web:
+    resources:
+      cache:
+        period: 0s

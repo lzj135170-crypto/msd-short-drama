@@ -1,0 +1,22 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2,<3
+modelscope==1.16.0
+transformers==4.35.2
+torch==2.2.2
+datasets==2.18.0
+numpy<2
+# ModelScope framework 运行时依赖；1.16.0 的包元数据未自动声明
+addict==2.4.0
+attrs>=23,<27
+simplejson>=3.19,<5
+sortedcontainers>=2.4,<3
+oss2>=2.19,<3
+jsonlines>=4,<5
+accelerate==0.27.2
+# 固定 NumPy 1.x 兼容的 pyarrow，避免 pyarrow 26 强制 NumPy 2
+pyarrow==14.0.2
+pandas>=2,<4
+scipy>=1.11,<2
+Pillow>=10,<14
+pyyaml>=6,<7

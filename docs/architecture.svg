@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1540" viewBox="0 0 1800 1540"
+     font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">码上短剧当前项目架构（含 P1–P3 + Rex 能力细节）</title>
+  <desc id="desc">Vue 3 前端经网关访问用户、短剧、订单、互动、Agent 和内容服务；网关负责 JWT、CORS、Sentinel 限流、内部 token 注入与 internal-source 隔离。P1 个性化：content-service 通过 Feign 聚合 interaction 的收藏/点赞/观看行为，结合目录分类标签生成画像，写入 Redis 偏好和 for-you 缓存，首页规则排序；RAG 使用原查询、模型变体和偏好 query 多查询扩展，Milvus 向量与 Elasticsearch BM25 混合检索，跨查询 RRF 融合后 DashScope Rerank。P2 路由与沙箱：agent-service 在模型前执行 PromptGuard 清洗、IntentRouter 规则路由和 Redis 路由缓存，高置信度注入 ROUTE_HINT，AUDIT 可走 A2A 快速通道，否则 Supervisor 兜底；ToolGuard 只注册 allowlist 业务工具，校验 ID/分页/文本长度并记录参数哈希；8105/8106 校验内部 token。P3 异步互动：interaction 在同一本地事务写明细和 outbox，OutboxRelay 以 claim_token + locked_until 租约、200 条批量、8 线程并行投递 Kafka；drama 与 interaction 两个消费组通过 t_event_consume_log 幂等更新短剧、剧集和评论计数；事件状态接口支持前端 ack 轮询，评论首页使用 Caffeine 缓存。RexUniNLU：content-service 在合规审核同时调用本地 8108 sidecar，生成情感倾向和标签建议，写入 ai_review_result.advisory；只做人工复核提示，不参与 2/3/4 状态，不写标签关系表，故障时 fail-open。数据层包含 MySQL、Redis、Kafka、Nacos、MinIO、Milvus、Elasticsearch、etcd、Seata。</desc>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-dot" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#f97316"/>
+    </marker>
+    <marker id="arrow-dashed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="1800" height="1540" fill="#f8fafc"/>
+  <rect x="18" y="18" width="1764" height="1504" rx="18" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- 标题 -->
+  <text x="60" y="54" font-size="28" font-weight="700" fill="#0f172a">码上短剧 · 当前项目架构（含 P1–P3 + Rex 能力细节）</text>
+  <text x="60" y="82" font-size="13" fill="#64748b">Spring Boot 4.0.8 · Spring Cloud 2025.1.3 · Spring AI 2.0.1 · Vue 3 · P1 个性化/多查询 · P2 路由/沙箱 · P3 异步互动</text>
+
+  <!-- 图例 -->
+  <text x="1240" y="44" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">图例</text>
+  <line x1="1240" y1="62" x2="1280" y2="62" stroke="#475569" stroke-width="1.8"/>
+  <text x="1290" y="66" font-size="12" fill="#475569">同步 HTTP / Feign</text>
+  <line x1="1240" y1="84" x2="1280" y2="84" stroke="#f97316" stroke-width="1.8" stroke-dasharray="2 5"/>
+  <text x="1290" y="88" font-size="12" fill="#475569">A2A / 异步</text>
+  <line x1="1240" y1="106" x2="1280" y2="106" stroke="#94a3b8" stroke-width="1.8" stroke-dasharray="6 5"/>
+  <text x="1290" y="110" font-size="12" fill="#475569">依赖 / 内部调用</text>
+
+  <rect x="1240" y="126" width="500" height="34" rx="17" fill="#ecfeff" stroke="#0891b2" stroke-width="1"/>
+  <text x="1260" y="148" font-size="12" fill="#155e75">RAG 已启用：改写 → 向量 + BM25 → RRF → Rerank → 生成</text>
+
+  <!-- 客户端 -->
+  <text x="700" y="100" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">客户端 / 接入层</text>
+  <rect x="700" y="110" width="400" height="64" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="900" y="136" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Vue 3 前端</text>
+  <text x="900" y="158" text-anchor="middle" font-size="12" fill="#475569">开发 :5173 · 生产由网关托管</text>
+
+  <line x1="900" y1="174" x2="900" y2="216" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="912" y="200" font-size="11" fill="#64748b">HTTP /api/**</text>
+
+  <!-- 网关 -->
+  <rect x="700" y="220" width="400" height="64" rx="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="900" y="246" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">msd-gateway :8000</text>
+  <text x="900" y="266" text-anchor="middle" font-size="12" fill="#475569">JWT / CORS / 路由 / Sentinel 限流 / 静态资源</text>
+  <text x="900" y="281" text-anchor="middle" font-size="9.5" fill="#7c3aed">P1/P2：internal-source 隔离 · 内部 token 注入</text>
+
+  <!-- 网关到 Agent（绕开业务服务层，走左侧空白） -->
+  <polyline points="700,252 50,252 50,500 150,500 150,540" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="245" font-size="9.5" fill="#64748b">agent /api/agent/**</text>
+
+  <!-- 网关到服务总线 -->
+  <line x1="900" y1="284" x2="900" y2="320" stroke="#475569" stroke-width="1.8"/>
+  <line x1="195" y1="320" x2="1550" y2="320" stroke="#475569" stroke-width="1.8"/>
+  <text x="912" y="312" font-size="11" fill="#64748b">HTTP + JWT</text>
+
+  <line x1="195" y1="320" x2="195" y2="370" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="520" y1="320" x2="520" y2="370" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="855" y1="320" x2="855" y2="370" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="1180" y1="320" x2="1180" y2="370" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="1550" y1="320" x2="1550" y2="370" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <text x="205" y="340" font-size="10" fill="#94a3b8">/api/user/**</text>
+  <text x="530" y="340" font-size="10" fill="#94a3b8">/api/drama/internal/**</text>
+  <text x="865" y="340" font-size="10" fill="#94a3b8">/api/order/**</text>
+  <text x="1195" y="340" font-size="10" fill="#94a3b8">/api/interaction/**</text>
+  <text x="1560" y="340" font-size="10" fill="#94a3b8">/api/content/**</text>
+  <text x="1560" y="352" font-size="9" fill="#94a3b8">recommend / personalized</text>
+
+  <!-- 业务与内容服务 -->
+  <text x="70" y="356" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">业务与内容服务</text>
+
+  <rect x="70" y="370" width="250" height="100" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="195" y="396" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">msd-user :8101</text>
+  <text x="195" y="418" text-anchor="middle" font-size="12" fill="#475569">注册登录 / JWT / 用户资料</text>
+  <text x="195" y="438" text-anchor="middle" font-size="11" fill="#64748b">MySQL</text>
+
+  <rect x="370" y="370" width="300" height="100" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="382" y="379" width="38" height="17" rx="8.5" fill="#dcfce7" stroke="#16a34a" stroke-width="0.8"/>
+  <text x="401" y="391" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">P3</text>
+  <text x="520" y="396" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">msd-drama :8102</text>
+  <text x="520" y="418" text-anchor="middle" font-size="12" fill="#475569">短剧 / 剧集 / 分类标签</text>
+  <text x="520" y="438" text-anchor="middle" font-size="11" fill="#64748b">审核 · 多级缓存 · 虚拟线程</text>
+  <text x="520" y="456" text-anchor="middle" font-size="9.5" fill="#166534">单条/批量计数 · 幂等消费 · 缓存失效</text>
+
+  <rect x="720" y="370" width="270" height="100" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="855" y="396" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">msd-order :8103</text>
+  <text x="855" y="418" text-anchor="middle" font-size="12" fill="#475569">充值 / 积分 / 解锁</text>
+  <text x="855" y="438" text-anchor="middle" font-size="11" fill="#64748b">Feign -&gt; drama · Seata</text>
+
+  <rect x="1040" y="370" width="280" height="100" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="1052" y="379" width="58" height="17" rx="8.5" fill="#dcfce7" stroke="#16a34a" stroke-width="0.8"/>
+  <text x="1081" y="391" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">P1/P3</text>
+  <text x="1180" y="396" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">msd-interaction :8104</text>
+  <text x="1180" y="418" text-anchor="middle" font-size="12" fill="#475569">点赞 / 收藏 / 评论 / 历史</text>
+  <text x="1180" y="438" text-anchor="middle" font-size="11" fill="#64748b">Feign 查剧 · Outbox · 评论缓存</text>
+  <text x="1180" y="456" text-anchor="middle" font-size="9.5" fill="#166534">行为聚合 · 事件状态 · 死锁重试</text>
+
+  <rect x="1370" y="370" width="360" height="100" rx="12" fill="#ecfeff" stroke="#0891b2" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="1382" y="379" width="38" height="17" rx="8.5" fill="#ecfeff" stroke="#0891b2" stroke-width="0.8"/>
+  <text x="1401" y="391" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">P1</text>
+  <text x="1550" y="394" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">msd-content-service :8107</text>
+  <text x="1550" y="415" text-anchor="middle" font-size="11" fill="#475569">RAG · 个性化 · 伴看 · 审核</text>
+  <text x="1550" y="435" text-anchor="middle" font-size="10.5" fill="#64748b">Feign 行为/目录 · Milvus + ES + DeepSeek</text>
+  <text x="1550" y="453" text-anchor="middle" font-size="9.5" fill="#64748b">多查询 RRF · 偏好排序 · 摘要/审核 JSON</text>
+
+  <!-- 个性化行为聚合 -->
+  <line x1="1370" y1="424" x2="1322" y2="424" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1346" y="416" text-anchor="middle" font-size="9" fill="#64748b">行为</text>
+
+  <!-- AI 服务 / 外部模型 -->
+  <text x="70" y="528" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">AI 服务 / 外部模型</text>
+
+  <rect x="70" y="540" width="320" height="100" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="82" y="549" width="38" height="17" rx="8.5" fill="#ffedd5" stroke="#f97316" stroke-width="0.8"/>
+  <text x="101" y="561" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">P2</text>
+  <text x="230" y="566" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">msd-agent-service :8105</text>
+  <text x="230" y="588" text-anchor="middle" font-size="12" fill="#475569">Supervisor · companion-agent · 伴看工具</text>
+  <text x="230" y="607" text-anchor="middle" font-size="10.5" fill="#64748b">PromptGuard · IntentRouter · RouteCache · ToolGuard</text>
+  <text x="230" y="626" text-anchor="middle" font-size="9.5" fill="#c2410c">ROUTE_HINT · AUDIT 快速通道 · spawn≤4</text>
+
+  <rect x="420" y="540" width="300" height="100" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="432" y="549" width="38" height="17" rx="8.5" fill="#ffedd5" stroke="#f97316" stroke-width="0.8"/>
+  <text x="451" y="561" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">P2</text>
+  <text x="570" y="566" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">audit A2A :8106</text>
+  <text x="570" y="588" text-anchor="middle" font-size="12" fill="#475569">audit profile / JSON-RPC</text>
+  <text x="570" y="607" text-anchor="middle" font-size="10.5" fill="#64748b">Nacos AgentCard · Feign 查剧</text>
+  <text x="570" y="626" text-anchor="middle" font-size="9.5" fill="#c2410c">X-Internal-Token · 注入/体积拦截</text>
+
+  <rect x="750" y="540" width="300" height="100" rx="12" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="900" y="566" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">DeepSeek API</text>
+  <text x="900" y="588" text-anchor="middle" font-size="12" fill="#475569">对话 / 改写 / 生成</text>
+  <text x="900" y="610" text-anchor="middle" font-size="11" fill="#64748b">HTTPS</text>
+
+  <rect x="1080" y="540" width="320" height="100" rx="12" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1240" y="566" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">DashScope API</text>
+  <text x="1240" y="588" text-anchor="middle" font-size="12" fill="#475569">Embedding / Rerank</text>
+  <text x="1240" y="610" text-anchor="middle" font-size="11" fill="#64748b">qwen3.7 · HTTPS</text>
+
+  <rect x="1450" y="540" width="300" height="100" rx="12" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="1462" y="549" width="52" height="17" rx="8.5" fill="#fef9c3" stroke="#ca8a04" stroke-width="0.8"/>
+  <text x="1488" y="561" text-anchor="middle" font-size="9" font-weight="700" fill="#854d0e">REX</text>
+  <text x="1600" y="566" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">RexUniNLU sidecar :8108</text>
+  <text x="1600" y="588" text-anchor="middle" font-size="11" fill="#475569">本地 CPU · 达摩院情感/标签</text>
+  <text x="1600" y="608" text-anchor="middle" font-size="10.5" fill="#64748b">advisory · fail-open · 只读建议</text>
+  <text x="1600" y="626" text-anchor="middle" font-size="9.5" fill="#854d0e">不参与 2/3/4 状态 · 不写 t_drama_tag_rel</text>
+
+  <!-- 内容服务依赖 -->
+  <polyline points="1400,470 1400,500 645,500 645,470" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1000" y="494" text-anchor="middle" font-size="10" fill="#64748b">Feign 目录</text>
+
+  <polyline points="1390,470 1390,520 900,520 900,540" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="840" y="534" text-anchor="middle" font-size="10" fill="#64748b">改写 / 生成</text>
+
+  <polyline points="1500,470 1500,535 1240,535 1240,540" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1450" y="528" text-anchor="middle" font-size="10" fill="#64748b">Rerank</text>
+
+  <line x1="1600" y1="470" x2="1600" y2="540" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1612" y="512" font-size="10" fill="#854d0e">advisory / fail-open</text>
+
+  <line x1="1520" y1="470" x2="1520" y2="738" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1530" y="700" font-size="10" fill="#64748b">向量</text>
+
+  <line x1="1670" y1="470" x2="1670" y2="738" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="1680" y="700" font-size="10" fill="#64748b">BM25</text>
+
+  <!-- Agent 依赖 -->
+  <polyline points="230,540 230,520 520,520 520,470" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="530" y="514" font-size="10" fill="#64748b">Feign</text>
+
+  <line x1="390" y1="590" x2="418" y2="590" stroke="#f97316" stroke-width="1.8" stroke-dasharray="2 5" marker-end="url(#arrow-dot)"/>
+  <text x="404" y="580" text-anchor="middle" font-size="10" fill="#c2410c">A2A</text>
+
+  <polyline points="300,640 300,660 900,660 900,640" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="600" y="676" text-anchor="middle" font-size="10" fill="#64748b">HTTPS</text>
+
+  <polyline points="100,640 100,690 540,690 540,738" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="550" y="704" font-size="10" fill="#64748b">会话</text>
+
+  <!-- JDBC 总线 -->
+  <line x1="195" y1="470" x2="195" y2="510" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="520" y1="470" x2="520" y2="510" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="855" y1="470" x2="855" y2="510" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="1180" y1="470" x2="1180" y2="510" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="40" y1="510" x2="1180" y2="510" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="40" y1="510" x2="40" y2="700" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="40" y1="700" x2="240" y2="700" stroke="#64748b" stroke-width="1.4"/>
+  <line x1="240" y1="700" x2="240" y2="738" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="250" y="504" font-size="9" fill="#94a3b8">JDBC</text>
+
+  <!-- Kafka Outbox -->
+  <polyline points="1250,470 1250,530 1065,530 1065,710 780,710 780,738" fill="none" stroke="#f97316" stroke-width="1.8" stroke-dasharray="2 5" marker-end="url(#arrow-dot)"/>
+  <text x="1000" y="526" font-size="10" fill="#c2410c">Outbox</text>
+
+  <!-- 数据与中间件 -->
+  <text x="70" y="720" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">数据与中间件</text>
+
+  <rect x="70" y="740" width="340" height="90" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="240" y="766" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">MySQL 8.0.45</text>
+  <text x="240" y="788" text-anchor="middle" font-size="12" fill="#475569">DL 业务库 · :3306</text>
+  <text x="240" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">outbox / consume_log · seata / xxl_job</text>
+
+  <rect x="430" y="740" width="220" height="90" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="540" y="766" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Redis 7.2.14</text>
+  <text x="540" y="788" text-anchor="middle" font-size="12" fill="#475569">会话 / 路由 / 偏好 / 缓存</text>
+  <text x="540" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">VM 192.168.33.129:6379</text>
+
+  <rect x="670" y="740" width="220" height="90" rx="12" fill="#f3e8ff" stroke="#9333ea" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="780" y="766" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Kafka 4.1.2</text>
+  <text x="780" y="788" text-anchor="middle" font-size="12" fill="#475569">like/favorite/comment/history · 6 分区</text>
+  <text x="780" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">VM 192.168.33.129:9092 · DLQ</text>
+
+  <rect x="910" y="740" width="220" height="90" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1020" y="766" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Nacos 3.1.1</text>
+  <text x="1020" y="788" text-anchor="middle" font-size="12" fill="#475569">配置 / 注册 / A2A</text>
+  <text x="1020" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">:8848 · 控制台 :8080</text>
+
+  <rect x="1150" y="740" width="180" height="90" rx="12" fill="#fce7f3" stroke="#db2777" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1240" y="766" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">MinIO :9000</text>
+  <text x="1240" y="788" text-anchor="middle" font-size="12" fill="#475569">封面 / 视频</text>
+  <text x="1240" y="808" text-anchor="middle" font-size="10" fill="#64748b">静态媒体 · Milvus 对象存储</text>
+
+  <rect x="1350" y="740" width="200" height="90" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1450" y="766" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Milvus 2.6.4</text>
+  <text x="1450" y="788" text-anchor="middle" font-size="10.5" fill="#475569">msd_drama_rag_v1</text>
+  <text x="1450" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">1024 维 · etcd / MinIO</text>
+
+  <rect x="1570" y="740" width="200" height="90" rx="12" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1670" y="766" text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a">Elasticsearch 8.15.3</text>
+  <text x="1670" y="788" text-anchor="middle" font-size="9.5" fill="#475569">msd_drama_bm25_v1</text>
+  <text x="1670" y="808" text-anchor="middle" font-size="10.5" fill="#64748b">BM25 · jieba</text>
+
+  <!-- 运维与可观测 -->
+  <text x="70" y="880" font-size="12" font-weight="600" fill="#94a3b8" letter-spacing="1">运维与可观测</text>
+
+  <rect x="70" y="900" width="240" height="80" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="190" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Seata Server :8091</text>
+  <text x="190" y="948" text-anchor="middle" font-size="12" fill="#475569">order 解锁全局事务</text>
+  <text x="190" y="968" text-anchor="middle" font-size="11" fill="#64748b">undo_log / TC :9988</text>
+
+  <rect x="330" y="900" width="220" height="80" rx="12" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="440" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Sentinel :8858</text>
+  <text x="440" y="948" text-anchor="middle" font-size="12" fill="#475569">网关限流 · Agent 熔断</text>
+  <text x="440" y="968" text-anchor="middle" font-size="10.5" fill="#64748b">agentChat / route 指标</text>
+
+  <rect x="570" y="900" width="220" height="80" rx="12" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="680" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Zipkin :9411</text>
+  <text x="680" y="948" text-anchor="middle" font-size="12" fill="#475569">全链路追踪 · outbox/route 指标</text>
+  <text x="680" y="968" text-anchor="middle" font-size="10.5" fill="#64748b">Brave / Micrometer / Actuator</text>
+
+  <rect x="810" y="900" width="220" height="80" rx="12" fill="#f8fafc" stroke="#64748b" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="920" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">xxl-job :8088</text>
+  <text x="920" y="948" text-anchor="middle" font-size="12" fill="#475569">msd-drama-executor</text>
+  <text x="920" y="968" text-anchor="middle" font-size="11" fill="#64748b">布隆重建 · 5 分钟</text>
+
+  <rect x="1050" y="900" width="220" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1160" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#475569">etcd 3.5.5</text>
+  <text x="1160" y="948" text-anchor="middle" font-size="12" fill="#64748b">Milvus 元数据</text>
+  <text x="1160" y="968" text-anchor="middle" font-size="11" fill="#94a3b8">:2379</text>
+
+  <rect x="1290" y="900" width="260" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1420" y="926" text-anchor="middle" font-size="14" font-weight="700" fill="#475569">Docker Compose</text>
+  <text x="1420" y="948" text-anchor="middle" font-size="12" fill="#64748b">9 个基础设施容器</text>
+  <text x="1420" y="968" text-anchor="middle" font-size="10.5" fill="#94a3b8">Nacos / Milvus / ES / ...</text>
+
+  <!-- Seata 与 MySQL 关系 -->
+  <line x1="190" y1="900" x2="190" y2="832" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)"/>
+  <text x="200" y="872" font-size="10" fill="#94a3b8">undo_log</text>
+
+  <!-- Milvus 与 etcd 关系 -->
+  <polyline points="1400,830 1400,860 1160,860 1160,898" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)"/>
+  <text x="1200" y="876" font-size="10" fill="#94a3b8">元数据</text>
+
+  <!-- 关键链路细节 -->
+  <line x1="60" y1="1015" x2="1740" y2="1015" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="60" y="1048" font-size="20" font-weight="700" fill="#0f172a">关键链路细节（P1–P3）</text>
+  <text x="60" y="1068" font-size="11" fill="#64748b">实线为同步调用，橙色虚线为 A2A / 异步；P4 验证数据见底部。</text>
+
+  <!-- P1 个性化与多查询 -->
+  <rect x="60" y="1082" width="550" height="342" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" filter="url(#shadow)"/>
+  <rect x="60" y="1082" width="550" height="5" rx="2.5" fill="#0891b2"/>
+  <text x="80" y="1112" font-size="16" font-weight="700" fill="#0f172a">P1 个性化推荐 + 多查询 RAG</text>
+  <text x="80" y="1131" font-size="10.5" fill="#64748b">首页「为你推荐」不调用 LLM；RAG 对话按需扩展 query</text>
+
+  <circle cx="82" cy="1166" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1170" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">1</text>
+  <rect x="100" y="1148" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1171" font-size="10.5" fill="#0f172a">HomeView → 网关 GET /api/content/.../personalized</text>
+
+  <line x1="82" y1="1176" x2="82" y2="1198" stroke="#0891b2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="82" cy="1208" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1212" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">2</text>
+  <rect x="100" y="1190" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1213" font-size="10.5" fill="#0f172a">PersonalizedRecommendService（content 8107）</text>
+
+  <line x1="82" y1="1218" x2="82" y2="1240" stroke="#0891b2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="82" cy="1250" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1254" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">3</text>
+  <rect x="100" y="1232" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1255" font-size="10.5" fill="#0f172a">UserPreferenceService → interaction 行为聚合（Feign 500/800ms）</text>
+
+  <line x1="82" y1="1260" x2="82" y2="1282" stroke="#0891b2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="82" cy="1292" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1296" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">4</text>
+  <rect x="100" y="1274" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1297" font-size="9.6" fill="#0f172a">Redis：msd:rag:pref:{id} + msd:rag:for-you:{id}:{limit}，5min</text>
+
+  <line x1="82" y1="1302" x2="82" y2="1324" stroke="#0891b2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="82" cy="1334" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1338" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">5</text>
+  <rect x="100" y="1316" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1339" font-size="9.6" fill="#0f172a">目录缓存 60s → 打分：分类 3 / 标签 2 / 热度 0.5 / 上新 +1</text>
+
+  <line x1="82" y1="1344" x2="82" y2="1366" stroke="#0891b2" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="82" cy="1376" r="10" fill="#e0f2fe" stroke="#0891b2" stroke-width="1"/>
+  <text x="82" y="1380" text-anchor="middle" font-size="9" font-weight="700" fill="#155e75">6</text>
+  <rect x="100" y="1358" width="490" height="36" rx="7" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="110" y="1381" font-size="9.4" fill="#0f172a">RAG：MultiQuery ≤3（2.5s）→ per-query top10 → RRF k60 → Rerank top3</text>
+  <text x="100" y="1412" font-size="9.5" fill="#64748b">冷启动 / Redis 失败 → 热播兜底，personalized=false</text>
+
+  <!-- P2 路由与沙箱 -->
+  <rect x="630" y="1082" width="550" height="342" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" filter="url(#shadow)"/>
+  <rect x="630" y="1082" width="550" height="5" rx="2.5" fill="#f97316"/>
+  <text x="650" y="1112" font-size="16" font-weight="700" fill="#0f172a">P2 意图路由 + 工具权限沙箱</text>
+  <text x="650" y="1131" font-size="10.5" fill="#64748b">规则前置、模型兜底；Prompt 注入在入口拦截</text>
+
+  <circle cx="652" cy="1166" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1170" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">1</text>
+  <rect x="670" y="1148" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1171" font-size="9.8" fill="#0f172a">AgentChatController → PromptGuard（清洗标记 / 注入 400）</text>
+
+  <line x1="652" y1="1176" x2="652" y2="1198" stroke="#f97316" stroke-width="1.2" marker-end="url(#arrow-dot)"/>
+  <circle cx="652" cy="1208" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1212" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">2</text>
+  <rect x="670" y="1190" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1213" font-size="10.5" fill="#0f172a">IntentRouter（Nacos 规则 + 置信度；决策 P95 &lt; 1s）</text>
+
+  <line x1="652" y1="1218" x2="652" y2="1240" stroke="#f97316" stroke-width="1.2" marker-end="url(#arrow-dot)"/>
+  <circle cx="652" cy="1250" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1254" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">3</text>
+  <rect x="670" y="1232" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1255" font-size="10.2" fill="#0f172a">RouteCache Redis 30min + 会话粘性（低置信不触发 AUDIT）</text>
+
+  <line x1="652" y1="1260" x2="652" y2="1282" stroke="#f97316" stroke-width="1.2" marker-end="url(#arrow-dot)"/>
+  <circle cx="652" cy="1292" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1296" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">4</text>
+  <rect x="670" y="1274" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1297" font-size="10.2" fill="#0f172a">高置信 → [ROUTE_HINT]；AUDIT → A2A 8106；否则 Supervisor</text>
+
+  <line x1="652" y1="1302" x2="652" y2="1324" stroke="#f97316" stroke-width="1.2" marker-end="url(#arrow-dot)"/>
+  <circle cx="652" cy="1334" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1338" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">5</text>
+  <rect x="670" y="1316" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1339" font-size="9.8" fill="#0f172a">ToolGuard：6 个只读工具 / ID·limit·query 校验 / 参数哈希审计</text>
+
+  <line x1="652" y1="1344" x2="652" y2="1366" stroke="#f97316" stroke-width="1.2" marker-end="url(#arrow-dot)"/>
+  <circle cx="652" cy="1376" r="10" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="652" y="1380" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">6</text>
+  <rect x="670" y="1358" width="490" height="36" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+  <text x="680" y="1381" font-size="10.2" fill="#0f172a">AgentGuardHook spawn≤4 · AgentReplySanitizer 去内部标记</text>
+  <text x="670" y="1412" font-size="9.5" fill="#64748b">8105/8106 校验 X-Internal-Token；网关剥离伪造值</text>
+
+  <!-- P3 异步互动 -->
+  <rect x="1200" y="1082" width="540" height="342" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" filter="url(#shadow)"/>
+  <rect x="1200" y="1082" width="540" height="5" rx="2.5" fill="#16a34a"/>
+  <text x="1220" y="1112" font-size="16" font-weight="700" fill="#0f172a">P3 异步互动计数 + 全链路闭环</text>
+  <text x="1220" y="1131" font-size="10.5" fill="#64748b">明细同步、派生异步；事件状态可查询</text>
+
+  <circle cx="1222" cy="1166" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1170" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">1</text>
+  <rect x="1240" y="1148" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1171" font-size="9.6" fill="#0f172a">InteractionService：明细 + outbox + clientRequestId 同事务</text>
+
+  <line x1="1222" y1="1176" x2="1222" y2="1198" stroke="#16a34a" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="1222" cy="1208" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1212" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">2</text>
+  <rect x="1240" y="1190" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1213" font-size="9.8" fill="#0f172a">OutboxRelay：claim 200 / 8 线程 / 1s 超时 / lease 60s</text>
+
+  <line x1="1222" y1="1218" x2="1222" y2="1240" stroke="#16a34a" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="1222" cy="1250" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1254" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">3</text>
+  <rect x="1240" y="1232" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1255" font-size="9.8" fill="#0f172a">Kafka 6 分区：like/favorite/comment/history + DLQ</text>
+
+  <line x1="1222" y1="1260" x2="1222" y2="1282" stroke="#16a34a" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="1222" cy="1292" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1296" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">4</text>
+  <rect x="1240" y="1274" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1297" font-size="9.6" fill="#0f172a">drama counter（单条/批量 BATCH ack）· interaction counter</text>
+
+  <line x1="1222" y1="1302" x2="1222" y2="1324" stroke="#16a34a" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="1222" cy="1334" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1338" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">5</text>
+  <rect x="1240" y="1316" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1339" font-size="9.8" fill="#0f172a">t_event_consume_log 幂等 → 计数 → 缓存失效</text>
+
+  <line x1="1222" y1="1344" x2="1222" y2="1366" stroke="#16a34a" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <circle cx="1222" cy="1376" r="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="1222" y="1380" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">6</text>
+  <rect x="1240" y="1358" width="480" height="36" rx="7" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="1250" y="1381" font-size="9.1" fill="#0f172a">GET /events/{id} SENT/DEAD/consumedGroups → 前端 ack 0/300/800/1500ms</text>
+  <text x="1240" y="1412" font-size="9.5" fill="#64748b">CommentCache 15s · Hikari 20 · 虚拟线程 · 死锁重试</text>
+
+  <!-- 底部说明 -->
+  <text x="70" y="1452" font-size="12" fill="#475569">平台说明：所有服务通过 Nacos 做配置与注册；网关 / Agent 接 Sentinel；业务服务上报 Zipkin；MinIO 提供封面与视频静态资源。</text>
+  <text x="70" y="1476" font-size="12" fill="#155e75">RAG 说明：msd-content-service 通过 Feign 导出短剧，写入 Milvus 与 Elasticsearch；Supervisor 已接入伴看工具（摘要/前情），RAG 推荐仍未接入 Agent。</text>
+  <text x="70" y="1500" font-size="12" fill="#166534">P4 验证：101 tests / 0 failures；互动 2000 calls / 并发 50，1999 成功（0.05%），p50/p95/p99=21/73/128ms；outbox 0、两个消费组 LAG 0。</text>
+</svg>

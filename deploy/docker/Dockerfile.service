@@ -1,0 +1,20 @@
+# 通用业务服务镜像模板
+# 构建示例：
+#   mvn -B -pl msd-drama -am package -DskipTests
+#   docker build -f deploy/docker/Dockerfile.service \
+#     --build-arg JAR_FILE=msd-drama/target/msd-drama-1.0.0-SNAPSHOT.jar \
+#     -t msd-drama:local .
+#
+# 注意：镜像只包含 Spring Boot jar，MySQL/Redis/Nacos/Kafka 等仍由
+# deploy/docker-compose.yml 或外部环境提供；端口以各服务配置为准。
+FROM eclipse-temurin:21-jre
+
+ARG JAR_FILE
+WORKDIR /app
+
+COPY ${JAR_FILE} app.jar
+
+ENV TZ=Asia/Shanghai
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

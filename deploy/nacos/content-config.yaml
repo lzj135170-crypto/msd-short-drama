@@ -1,0 +1,199 @@
+# 码上短剧 RAG 内容推荐配置
+# 由 scripts/init-nacos-config.py 发布
+# namespace=mashang-duanju-{{ENV}}, group=DEFAULT_GROUP, dataId=content-config.yaml
+msd:
+  ai:
+    rag:
+      enabled: true
+      reindex-on-startup: false
+      total-timeout-ms: 75000
+      rewrite:
+        enabled: true
+        timeout-ms: 3000
+        failure-backoff-ms: 30000
+      vector:
+        enabled: true
+        top-k: 20
+        # DashScope embedding 单批最多 20 条
+        batch-size: 20
+        timeout-ms: 3000
+      bm25:
+        enabled: true
+        top-k: 20
+        timeout-ms: 2000
+        failure-backoff-ms: 15000
+      hybrid:
+        rrf-k: 60
+        top-k: 20
+      rerank:
+        enabled: true
+        top-n: 3
+        # 低于该分数视为无匹配，用于无结果评测和控制编造
+        min-score: 0.25
+        use-rewritten-query: false
+        url: "${DASHSCOPE_RERANK_URL:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}"
+        model: ${DASHSCOPE_RERANK_MODEL:qwen3.7-text-rerank}
+        api-key: ${DASHSCOPE_API_KEY:}
+        timeout-ms: 3000
+        failure-backoff-ms: 30000
+      milvus:
+        host: ${MILVUS_HOST:127.0.0.1}
+        port: ${MILVUS_PORT:19530}
+        database-name: default
+        collection-name: msd_drama_rag_v1
+        embedding-dimension: 1024
+        index-type: IVF_FLAT
+        metric-type: COSINE
+        connect-timeout-ms: 2000
+        rpc-deadline-ms: 3000
+        failure-backoff-ms: 15000
+      elasticsearch:
+        base-url: "${ELASTICSEARCH_URL:http://127.0.0.1:9200}"
+        index-name: msd_drama_bm25_v1
+        connect-timeout-ms: 1000
+        read-timeout-ms: 2000
+      catalog:
+        page-size: 200
+        max-pages: 100
+      document:
+        max-description-chars: 1200
+        max-episode-titles: 30
+      # DRAMA_CHANGED 增量索引：去抖、幂等和失败重试
+      incremental:
+        enabled: true
+        debounce-ms: 2000
+        concurrency: 2
+        dedup-ttl-hours: 168
+        retry-attempts: 3
+        retry-delay-ms: 5000
+      # 多查询扩展：默认查询 + 1 个变体 + 可选偏好 query
+      expansion:
+        enabled: true
+        max-queries: 3
+        additional-queries: 1
+        include-preference: true
+        timeout-ms: 2500
+        failure-backoff-ms: 30000
+        per-query-top-k: 10
+      # 用户偏好：画像缓存和 Top 分类/标签
+      personalization:
+        enabled: true
+        cache-minutes: 5
+        top-categories: 3
+        top-tags: 5
+    # 结构化审核：严格 JSON + 标签枚举
+    audit:
+      enabled: true
+      timeout-ms: 10000
+      max-attempts: 2
+    # 创作者 AI 预检：只给合规结论和文案建议，不写审核状态
+    precheck:
+      enabled: true
+      daily-limit: 10
+      cache-minutes: 10
+      cache-max-entries: 500
+      suggestion-timeout-ms: 8000
+      max-title-suggestions: 3
+      max-subtitle-suggestions: 3
+      max-tag-suggestions: 5
+      max-tips: 3
+      max-suggestion-chars: 80
+    # AI 治理：灰度、A/B、token 预算和 RAG 缓存
+    governance:
+      features:
+        # AI 找剧灰度，5 -> 50 -> 100 调整 gray-percent
+        rag-search:
+          enabled: true
+          gray-percent: 100
+          anonymous-included: true
+      experiments:
+        # RAG 生成模型实验，默认只走 control
+        rag-model:
+          enabled: false
+          salt: msd-rag
+          anonymous-included: false
+          variants:
+            - name: control
+              percent: 100
+            - name: light
+              percent: 0
+              model: deepseek-chat
+              temperature: 0.2
+      budget:
+        enabled: true
+        daily-tokens-per-user: 200000
+        chars-per-token: 1.5
+        expected-output-tokens: 500
+      cache:
+        exact-enabled: true
+        exact-minutes: 5
+        exact-max-entries: 500
+        semantic-enabled: false
+        semantic-minutes: 10
+        semantic-max-entries: 200
+        semantic-threshold: 0.95
+    # 创作者 Copilot：多版本标题/副标题/标签建议，只读
+    copilot:
+      enabled: true
+      daily-limit: 20
+      cache-minutes: 10
+      cache-max-entries: 300
+      max-versions: 3
+      max-title-chars: 30
+      max-subtitle-chars: 60
+      max-tag-chars: 20
+      max-rationale-chars: 120
+      max-tips: 3
+    # 评论课代表：只聚合观点，不当作剧情事实
+    comment-summary:
+      enabled: true
+      timeout-ms: 15000
+    # RexUniNLU 情感/标签建议：本地 sidecar，失败只降级建议、不影响合规状态
+    rex:
+      enabled: true
+      base-url: http://127.0.0.1:8108
+      analyze-path: /v1/analyze
+      connect-timeout-ms: 1000
+      timeout-ms: 8000
+      join-timeout-ms: 7500
+      failure-backoff-ms: 30000
+      tag-cache-ms: 300000
+      max-tag-candidates: 30
+      max-tags: 5
+      internal-token: ${REX_UNINLU_INTERNAL_TOKEN:}
+      sentiment-labels: [正向情感, 负向情感]
+      default-tag-candidates: [逆袭, 甜宠, 重生, 复仇, 悬疑, 穿越, 学霸, 先婚后爱, 职场, 玄幻, 亲情, 搞笑]
+    # AI 伴看：分集摘要和轻量模型
+    companion:
+      enabled: true
+      summary:
+        max-chars: 120
+      context:
+        default-top-k: 3
+        max-top-k: 5
+        max-summary-chars: 200
+      memory:
+        # 最近 20 条约等于 10 轮
+        max-messages: 20
+        # 溢出消息攒够 4 条再压缩，避免单条消息生成摘要时模型编造
+        compression-batch: 4
+        max-archived-messages: 200
+        ttl-days: 7
+        max-summary-chars: 240
+        compress-message-chars: 300
+        lock-wait-ms: 200
+        lock-lease-ms: 10000
+      chat:
+        timeout-ms: 30000
+      recap:
+        # 本集看点最多带几条前情
+        max-previous: 5
+      light-model:
+        model: ${COMPANION_LIGHT_MODEL:qwen-flash}
+        temperature: 0.1
+        max-tokens: 256
+        timeout-ms: 4000
+        max-retries: 0
+        # 为空时复用 spring.ai.openai.base-url / api-key
+        base-url: ""
+        api-key: ""

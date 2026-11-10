@@ -1,0 +1,41 @@
+# 码上短剧互动服务配置
+# 由 scripts/init-nacos-config.py 发布到 Nacos
+# namespace=mashang-duanju-{{ENV}}, group=DEFAULT_GROUP, dataId=msd-interaction.yaml
+spring:
+  datasource:
+    hikari:
+      # 互动写接口并发高于普通服务，单独放大连接池
+      maximum-pool-size: 20
+  threads:
+    virtual:
+      # Java 21 虚拟线程承载互动写接口
+      enabled: true
+  kafka:
+    consumer:
+      # 新消费组从最新开始，避免回放历史 LIKE/COMMENT 造成评论计数重复
+      auto-offset-reset: latest
+    producer:
+      properties:
+        # outbox 发送线程只等待 1 秒，避免 relay 被 Kafka 元数据阻塞拖住
+        max.block.ms: 1000
+
+msd:
+  outbox:
+    relay-interval-ms: 1000
+    batch-size: 200
+    send-timeout-ms: 1000
+    max-retry: 5
+  interaction:
+    # 评论正文同步落库，计数/缓存等派生效果异步
+    async-counter:
+      enabled: true
+    comment-cache:
+      enabled: true
+      ttl-seconds: 15
+    comment-summary:
+      # 评论课代表本地缓存 10 分钟
+      cache-enabled: true
+      cache-ttl-seconds: 600
+  kafka:
+    # topic 分区扩到 6 后消费者同步扩到 6
+    interaction-concurrency: 6

@@ -1,0 +1,68 @@
+# 用户与认证服务
+server:
+  port: 8101
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-user
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-user.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+
+# 登录 Token 配置，secret/issuer 必须与网关保持一致
+msd:
+  auth:
+    jwt:
+      secret: ${MSD_JWT_SECRET:msd-dev-jwt-secret-change-me-32bytes-min}
+      issuer: ${MSD_JWT_ISSUER:msd}
+      ttl-seconds: 86400
+
+mybatis-plus:
+  configuration:
+    # 数据库下划线字段映射到 Java 驼峰属性
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      # 主键由数据库自增
+      id-type: auto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+logging:
+  level:
+    com.msd: info

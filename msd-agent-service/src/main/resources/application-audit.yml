@@ -1,0 +1,31 @@
+# audit profile：与 Supervisor 同模块、不同进程，只暴露 A2A 审核服务
+server:
+  port: 8106
+
+spring:
+  application:
+    name: msd-audit-agent
+  cloud:
+    nacos:
+      config:
+        # 必须显式固定 namespace；否则 profile=audit 会推导出不存在的 mashang-duanju-audit
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-dev}
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-dev}
+        # audit 不注册为普通微服务，但仍保留发现能力供 Feign 调用 msd-drama
+        register-enabled: false
+    sentinel:
+      # 第二个进程使用独立 transport 端口，避免与 Supervisor 的 8720 冲突
+      enabled: false
+      transport:
+        port: 8721
+
+agentscope:
+  a2a:
+    server:
+      enabled: true
+
+logging:
+  level:
+    com.msd: info
+    io.agentscope: info

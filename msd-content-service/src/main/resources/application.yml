@@ -1,0 +1,99 @@
+# RAG 内容推荐服务（WebFlux）
+server:
+  port: 8107
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-content-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  main:
+    web-application-type: reactive
+  # 让 trace 跨 boundedElastic 线程切换，RAG 各阶段串到同一 span
+  reactor:
+    context-propagation: auto
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-content-service.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:content-config.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  kafka:
+    consumer:
+      group-id: msd-content-rag-index-v1
+      # 首次启动回放历史变更，避免 content 停机期间漏掉索引更新
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      # 单条失败立即重试，不提交后续位点
+      ack-mode: record
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+    openfeign:
+      client:
+        config:
+          msd-drama:
+            connect-timeout: 2000
+            read-timeout: 15000
+          msd-interaction:
+            connect-timeout: 500
+            read-timeout: 800
+          msd-order:
+            connect-timeout: 1000
+            read-timeout: 2000
+  ai:
+    model:
+      chat: deepseek
+      embedding: openai
+    deepseek:
+      # auto-config 会 Assert.hasText(api-key)；占位值保证无 Key 也能启动，调用时再降级
+      api-key: ${DEEPSEEK_API_KEY:not-configured}
+      # 不要写成 ${DEEPSEEK_BASE_URL:}，空值会覆盖默认地址；自定义代理用命令行/Nacos 覆盖
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: ${DEEPSEEK_MODEL:deepseek-flash}
+          temperature: 0.3
+    openai:
+      api-key: ${DASHSCOPE_API_KEY:not-configured}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      timeout: 10s
+      embedding:
+        timeout: 10s
+        max-retries: 2
+        options:
+          model: ${DASHSCOPE_EMBEDDING_MODEL:qwen3.7-text-embedding-flash}
+          dimensions: 1024
+    retry:
+      # 默认 10 次会把 401/超时放大，降到 2 次
+      max-attempts: 2
+      on-client-errors: false
+      backoff:
+        initial-interval: 500ms
+        max-interval: 2s
+        multiplier: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.msd: info

@@ -1,0 +1,2 @@
+# 本地 ASR worker 依赖；需要系统安装 ffmpeg
+faster-whisper>=1.1.0

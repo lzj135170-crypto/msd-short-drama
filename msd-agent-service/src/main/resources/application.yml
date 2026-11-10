@@ -1,0 +1,88 @@
+# AI Agent 服务（WebFlux）
+server:
+  port: 8105
+  shutdown: graceful
+
+spring:
+  application:
+    name: msd-agent-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  reactor:
+    # boundedElastic 线程切换时恢复 trace 上下文
+    context-propagation: auto
+  config:
+    import:
+      - nacos:common.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - optional:nacos:msd-agent-service.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+      - nacos:agent-config.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+        group: DEFAULT_GROUP
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+    # Sentinel 熔断降级
+    sentinel:
+      eager: true
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+        # dashboard 只接受合法 IPv4，host.docker.internal 会被拒绝
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.1}
+        port: 8720
+      datasource:
+        degrade:
+          nacos:
+            server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+            namespace: ${NACOS_NAMESPACE:mashang-duanju-${spring.profiles.active}}
+            data-id: sentinel-agent-degrade.json
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: degrade
+    # 调用 msd-drama 的只读接口，避免工具调用长时间挂起
+    openfeign:
+      client:
+        config:
+          msd-drama:
+            connect-timeout: 2000
+            read-timeout: 5000
+          # 伴看/找剧共用 content 客户端；找剧 RAG 生成可能较慢，读超时放宽到 60 秒
+          msd-content-service:
+            connect-timeout: 2000
+            read-timeout: 60000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,refresh,metrics
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    port: ${server.port}
+    env: ${msd.env.name:unknown}
+
+# Supervisor 进程不暴露 A2A；audit profile 在 application-audit.yml 中覆盖为 true
+agentscope:
+  a2a:
+    server:
+      enabled: false
+
+logging:
+  level:
+    com.msd: info

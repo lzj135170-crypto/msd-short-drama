@@ -1,0 +1,5 @@
+# 本地开发环境：开启 DLQ 故障注入与只读巡检接口
+msd:
+  dev:
+    faults:
+      enabled: true
